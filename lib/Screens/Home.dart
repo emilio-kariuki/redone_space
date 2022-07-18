@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +18,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'dart:ui' as ui;
+import '../Controller/spaceController.dart';
 
 class Home extends StatefulWidget {
   const Home({Key? key}) : super(key: key);
@@ -35,25 +38,33 @@ class _HomeState extends State<Home> {
   final Completer<GoogleMapController> _controller = Completer();
   LatLng? currentPosition;
   final Location _location = Location();
-
+  final spaceController = Get.put(SpaceController());
   final heights = TextEditingController();
   final variety = TextEditingController();
   final row = TextEditingController();
   final column = TextEditingController();
+  final name = TextEditingController();
+  Set<Marker> _markers = Set();
 
-  final List<Marker> _markers = [
-    const Marker(
-        markerId: MarkerId('marker_2'),
-        position: LatLng(36.959988288487104, -0.398163985596978),
-        draggable: true),
-  ];
+  addMarkers() async {
+    final Uint8List markerIcon =
+        await getBytesFromAsset("assets/Images/pick_marker.png", 50);
+    _markers.add(
+      Marker(
+          markerId: const MarkerId('marker_2'),
+          position: const LatLng(36.959988288487104, -0.398163985596978),
+          icon: BitmapDescriptor.fromBytes(markerIcon),
+          draggable: true),
+    );
+  }
 
   @override
   void initState() {
     SystemChannels.textInput.invokeMethod('TextInput.hide');
-
     super.initState();
     checkConnectivity();
+    getUserLocation();
+    addMarkers();
   }
 
   Widget build(BuildContext context) {
@@ -62,13 +73,143 @@ class _HomeState extends State<Home> {
         body: SafeArea(
       child: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
-        child: Column(
-          children: [
-            showTitle("D-Krops"),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Column(
+            children: [
+              Center(child: showTitle("D-Krops")),
+              displayImage(),
+              const SizedBox(height: 5),
+              fieldsContain(),
+              const SizedBox(height: 5),
+              mapContain(),
+              const SizedBox(height: 5),
+              rowButton()
+            ],
+          ),
         ),
       ),
     ));
+  }
+
+  Widget fieldsContain() {
+    final size = MediaQuery.of(context).size;
+    return Container(
+      height: size.height * 0.65,
+      padding: const EdgeInsets.only(left: 10, right: 10),
+      decoration: BoxDecoration(
+          border: Border.all(
+              color: const Color.fromARGB(255, 14, 14, 20), width: 1),
+          color: Colors.blueGrey[800],
+          borderRadius: BorderRadius.circular(15)),
+      child: Column(
+        children: [
+          whiteText("Type of crop"),
+          showDivider(),
+          rowDown("assets/Lottie/select.json", "Select", items, selectedType),
+          const SizedBox(height: 3),
+          rowField(variety, "Identity", TextInputType.number,
+              "assets/Lottie/balls.json"),
+          whiteText("Spacing"),
+          showDivider(),
+          rowField(row, "Row", TextInputType.number, "assets/Lottie/row.json"),
+          const SizedBox(height: 3),
+          rowField(column, "Identity", TextInputType.number,
+              "assets/Lottie/columns.json"),
+          whiteText("Features"),
+          showDivider(),
+          rowDown("assets/Lottie/shovel.json", "Select Method", itemz,
+              selectedMethod),
+          const SizedBox(height: 3),
+          rowField(name, "Project Name", TextInputType.text,
+              "assets/Lottie/height.json"),
+          whiteText("Plantation Date"),
+          showDivider(),
+          Row(
+            children: [
+              InkWell(
+                  onTap: datePick,
+                  child: lottieContain("assets/Lottie/icon.json")),
+              const SizedBox(width: 15),
+              Obx(() {
+                return whiteText(
+                    spaceController.plantationDate.value.toString());
+              }),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget mapContain() {
+    final size = MediaQuery.of(context).size;
+    return Container(
+        decoration: BoxDecoration(
+            border: Border.all(
+                color: const Color.fromARGB(255, 14, 14, 20), width: 1),
+            color: Colors.blueGrey[800],
+            borderRadius: BorderRadius.circular(15)),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 10),
+              child: whiteText("Type of crop"),
+            ),
+            showDivider(),
+            showMap()
+          ],
+        ));
+  }
+
+  Widget showMap() {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.3,
+      decoration: BoxDecoration(
+        border:
+            Border.all(color: const Color.fromARGB(255, 14, 14, 20), width: 1),
+        color: Colors.blueGrey[800],
+        borderRadius: const BorderRadius.only(
+            bottomLeft: Radius.circular(10), bottomRight: Radius.circular(10)),
+      ),
+      child: googleMaps(),
+    );
+  }
+
+  Future<void> datePick() {
+    return showDatePicker(
+            builder: (context, child) {
+              return Theme(
+                data: Theme.of(context).copyWith(
+                  colorScheme: const ColorScheme.light(
+                    primary: Color.fromARGB(
+                        255, 221, 165, 9), // header background color
+                    onPrimary: Colors.black, // header text color
+                    onSurface: Color.fromARGB(255, 0, 0, 0), // body text color
+                  ),
+                  textButtonTheme: TextButtonThemeData(
+                    style: TextButton.styleFrom(
+                      primary: Colors.red, // button text color
+                    ),
+                  ),
+                ),
+                child: child!,
+              );
+            },
+            context: context,
+            initialDate: today ?? DateTime.now(),
+            firstDate: DateTime(2000),
+            lastDate: DateTime(2030))
+        .then((value) {
+      setState(() {
+        spaceController.plantationDate.value = value!;
+        spaceController.plantationDate.value = (DateFormat.yMMM()
+            .format(spaceController.plantationDate.value) as DateTime);
+        // row_2 = double.parse(row.text);
+        // column_2 =
+        //     double.parse(column.text);
+      });
+    });
   }
 
   Future<void> getImage(ImageSource source) async {
@@ -110,27 +251,32 @@ class _HomeState extends State<Home> {
     }
   }
 
-  Future<void> updateCameraPostion(CameraPosition _position) async {
-    latitude = _position.target.latitude;
-    longitude = _position.target.longitude;
-    print(latitude);
-    print(longitude);
-    print(
-        'inside updatePosition ${_position.target.latitude} ${_position.target.longitude}');
-    Marker marker =
-        _markers.firstWhere((p) => p.markerId == const MarkerId('marker_2'));
+  Future<Uint8List> getBytesFromAsset(String path, int width) async {
+    ByteData data = await rootBundle.load(path);
+    ui.Codec codec = await ui.instantiateImageCodec(data.buffer.asUint8List(),
+        targetWidth: width);
+    ui.FrameInfo fi = await codec.getNextFrame();
+    return (await fi.image.toByteData(format: ui.ImageByteFormat.png))!
+        .buffer
+        .asUint8List();
+  }
 
-    final bitmapIcon = await BitmapDescriptor.fromAssetImage(
-        const ImageConfiguration(size: Size(4, 4)), "assets/lottie/loc.png");
-    _markers.remove(marker);
+  Future<void> updateCameraPosition(CameraPosition position) async {
+    latitude = position.target.latitude;
+    longitude = position.target.longitude;
+    print(
+        'inside updatePosition ${position.target.latitude} ${position.target.longitude}');
+    final Uint8List markerIcon =
+        await getBytesFromAsset('assets/Images/pick_marker.png', 150);
+
     _markers.add(
       Marker(
-        markerId: const MarkerId('marker_2'),
-        position: LatLng(_position.target.latitude, _position.target.longitude),
-        draggable: true,
-        // icon: bitmapIcon,
-      ),
+          markerId: const MarkerId('marker_2'),
+          position: LatLng(position.target.latitude, position.target.longitude),
+          icon: BitmapDescriptor.fromBytes(markerIcon),
+          draggable: true),
     );
+
     setState(() {});
   }
 
@@ -151,7 +297,7 @@ class _HomeState extends State<Home> {
     print(position);
     latitude = position.latitude;
     longitude = position.longitude;
-    updateCameraPostion(CameraPosition(
+    updateCameraPosition(CameraPosition(
       target: LatLng(position.latitude, position.longitude),
       zoom: 15,
     ));
@@ -226,46 +372,62 @@ class _HomeState extends State<Home> {
     );
   }
 
-  Widget displayImage() {
-    final size = MediaQuery.of(context).size;
+  Widget whiteText(String text) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Stack(
+      padding: const EdgeInsets.only(left: 8.0, top: 5),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
-          Material(
-            color: const Color.fromARGB(255, 36, 47, 53),
-            elevation: 20,
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              height: size.height * 0.3,
-              width: size.width,
-              decoration: BoxDecoration(
-                color: Colors.blueGrey[800],
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: const Color.fromARGB(255, 14, 14, 20), width: 1),
-              ),
-              child: Center(
-                child: image != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: Image.file(
-                          image!,
-                          width: size.width,
-                          height: size.height * 0.32,
-                          fit: BoxFit.cover,
-                        ),
-                      )
-                    : Text("Select Image",
-                        style: GoogleFonts.roboto(
-                            fontSize: 20, color: Colors.white)),
-              ),
-              // image: image
-            ),
+          Text(
+            text,
+            textAlign: TextAlign.left,
+            style: GoogleFonts.quicksand(
+                fontSize: 18,
+                color: const Color.fromARGB(255, 255, 255, 255),
+                fontWeight: FontWeight.bold),
           ),
-          Positioned(top: 5, right: 5, child: iconImage()),
         ],
       ),
+    );
+  }
+
+  Widget displayImage() {
+    final size = MediaQuery.of(context).size;
+    return Stack(
+      children: [
+        Material(
+          color: const Color.fromARGB(255, 36, 47, 53),
+          elevation: 20,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            height: size.height * 0.2,
+            width: size.width,
+            decoration: BoxDecoration(
+              color: Colors.blueGrey[800],
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: const Color.fromARGB(255, 14, 14, 20), width: 1),
+            ),
+            child: Center(
+              child: image != null
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Image.file(
+                        image!,
+                        width: size.width,
+                        height: size.height * 0.32,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : Text("Select Image",
+                      style: GoogleFonts.roboto(
+                          fontSize: 16, color: Colors.white)),
+            ),
+            // image: image
+          ),
+        ),
+        Positioned(top: 5, right: 5, child: iconImage()),
+      ],
     );
   }
 
@@ -277,52 +439,44 @@ class _HomeState extends State<Home> {
           });
         },
         icon: Icon(Icons.add_a_photo,
-            size: 35,
+            size: 20,
             color: image != null
                 ? Colors.white
                 : const Color.fromARGB(255, 223, 152, 1)));
   }
 
-  Widget dropDown(String hint, List list, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "Select",
-            style: GoogleFonts.quicksand(
-                fontSize: 16,
-                color: const Color.fromARGB(255, 24, 23, 37),
-                fontWeight: FontWeight.w500,
-                letterSpacing: 0.001),
+  Widget dropDown(String hint, List list, String? values) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButton2(
+          underline: Container(
+            height: 0,
           ),
-          DropdownButton2(
-            icon: const Icon(
-              Icons.arrow_forward_ios_outlined,
-            ),
-            buttonPadding: const EdgeInsets.only(left: 14, right: 14),
-            buttonDecoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                width: 1,
-                color: const Color.fromARGB(255, 180, 182, 184),
-              ),
-              color: const Color.fromARGB(255, 255, 255, 255),
-            ),
-            scrollbarAlwaysShow: true,
-            dropdownMaxHeight: MediaQuery.of(context).size.height * 0.3,
-            hint: showTexts(hint),
-            buttonWidth: MediaQuery.of(context).size.width,
-            items: list
-                .map((item) => DropdownMenuItem<String>(
-                      value: item,
-                      child: showTexts(item),
-                    ))
-                .toList(),
-            value: value,
-            onChanged: (value) {
-              setState(() => value = value as String);
+          icon: const Icon(
+            Icons.arrow_forward_ios_outlined,
+            size: 18,
+          ),
+          buttonPadding: const EdgeInsets.only(left: 10, right: 10),
+          buttonDecoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            color: const Color.fromARGB(255, 255, 255, 255),
+          ),
+          scrollbarAlwaysShow: true,
+          dropdownMaxHeight: MediaQuery.of(context).size.height * 0.3,
+          hint: showTexts(hint),
+          buttonWidth: MediaQuery.of(context).size.width * 0.68,
+          items: list
+              .map((item) => DropdownMenuItem<String>(
+                    value: item,
+                    child: showTexts(item),
+                  ))
+              .toList(),
+          value: values,
+          onChanged: (value) {
+            setState(() {
+              values = value as String;
+              print(value.toString());
               isActivated = true;
               switch (value) {
                 case 'godget':
@@ -444,10 +598,11 @@ class _HomeState extends State<Home> {
                   unique = 0;
                   break;
               }
-            },
-          )
-        ],
-      ),
+              print(unique);
+            });
+          },
+        )
+      ],
     );
   }
 
@@ -473,7 +628,7 @@ class _HomeState extends State<Home> {
         child: child);
   }
 
-  Widget rowDown(String lottieUrl, String hint, List list, String value) {
+  Widget rowDown(String lottieUrl, String hint, List list, String? value) {
     final size = MediaQuery.of(context).size;
     return Row(
       children: [
@@ -495,6 +650,10 @@ class _HomeState extends State<Home> {
             contentPadding: const EdgeInsets.fromLTRB(15, 20, 15, 15),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10.0),
+              borderSide: const BorderSide(
+                color: Color.fromARGB(255, 255, 255, 255),
+                width: 1.0,
+              ),
             ),
             filled: true,
             hintStyle: GoogleFonts.quicksand(
@@ -504,7 +663,7 @@ class _HomeState extends State<Home> {
                 letterSpacing: 0.001),
             focusColor: Colors.red,
             hintText: hint,
-            fillColor: Colors.grey[200]),
+            fillColor: Colors.white),
         controller: controller,
       ),
     );
@@ -532,7 +691,7 @@ class _HomeState extends State<Home> {
         text,
         textAlign: TextAlign.center,
         style: GoogleFonts.quicksand(
-            fontSize: 23,
+            fontSize: 24,
             color: const Color.fromARGB(255, 24, 23, 37),
             fontWeight: FontWeight.bold),
       ),
@@ -544,10 +703,10 @@ class _HomeState extends State<Home> {
       children: [
         Expanded(
           child: Container(
-              margin: const EdgeInsets.only(left: 20.0, right: 20.0),
+              margin: const EdgeInsets.only(left: 15.0, right: 15.0),
               child: const Divider(
                 color: Color.fromARGB(255, 255, 255, 255),
-                height: 5,
+                height: 15,
                 thickness: 0.4,
               )),
         ),
@@ -558,40 +717,49 @@ class _HomeState extends State<Home> {
   Widget googleMaps() {
     return Stack(
       children: [
-        GoogleMap(
-          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-            Factory<OneSequenceGestureRecognizer>(
-              () => EagerGestureRecognizer(),
+        ClipRRect(
+          borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(10),
+              bottomRight: Radius.circular(10)),
+          child: GoogleMap(
+            gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+              Factory<OneSequenceGestureRecognizer>(
+                () => EagerGestureRecognizer(),
+              ),
+            },
+            onCameraMove: ((position) => updateCameraPosition(position)),
+            markers: Set<Marker>.of(_markers),
+            mapType: MapType.hybrid,
+            myLocationButtonEnabled: true,
+            myLocationEnabled: false,
+            tiltGesturesEnabled: true,
+            zoomControlsEnabled: false,
+            indoorViewEnabled: true,
+            zoomGesturesEnabled: false,
+            initialCameraPosition: CameraPosition(
+              target: currentPosition!,
+              zoom: 14,
             ),
-          },
-          onCameraMove: ((position) => updateCameraPostion(position)),
-          markers: Set<Marker>.of(_markers),
-          mapType: MapType.hybrid,
-          myLocationButtonEnabled: true,
-          myLocationEnabled: false,
-          tiltGesturesEnabled: true,
-          zoomControlsEnabled: true,
-          indoorViewEnabled: true,
-          zoomGesturesEnabled: false,
-          initialCameraPosition: CameraPosition(
-            target: currentPosition!,
-            zoom: 14.4746,
+            onMapCreated: (GoogleMapController controller) {
+              _controller.complete(controller);
+              //getLocation();
+              // getPermission();
+            },
           ),
-          onMapCreated: (GoogleMapController controller) {
-            _controller.complete(controller);
-            getLocation();
-            // getPermission();
-          },
         ),
         Positioned(
-          bottom: 80,
+          bottom: 10,
           right: 10,
-          child: FloatingActionButton(
-            mini: true,
-            backgroundColor: Theme.of(context).cardColor,
-            onPressed: () => goToLocation(),
-            child:
-                Icon(Icons.my_location, color: Theme.of(context).primaryColor),
+          child: SizedBox(
+            height: 30,
+            width: 30,
+            child: FloatingActionButton(
+              mini: true,
+              backgroundColor: Theme.of(context).cardColor,
+              onPressed: () => goToLocation(),
+              child: Icon(Icons.my_location,
+                  size: 18, color: Theme.of(context).primaryColor),
+            ),
           ),
         ),
       ],
@@ -607,20 +775,21 @@ class _HomeState extends State<Home> {
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: LatLng(latitude!, longitude!),
-            zoom: 14.4746,
+            zoom: 14,
           ),
         ),
       );
     });
   }
 
-  Future<void> getUserLocation() async {
+  getUserLocation() async {
     var position = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.best,
     );
 
     setState(() {
       currentPosition = LatLng(position.latitude, position.longitude);
+      print(currentPosition);
     });
   }
 
@@ -636,7 +805,7 @@ class _HomeState extends State<Home> {
           // MaterialStateProperty<Color?>?
           shape: MaterialStateProperty.all<RoundedRectangleBorder>(
             RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(30.0),
+              borderRadius: BorderRadius.circular(20.0),
               side: const BorderSide(
                 color: Color.fromARGB(255, 14, 14, 20),
                 width: 2.0,
@@ -689,8 +858,8 @@ class _HomeState extends State<Home> {
     final String column_1 = column.text;
     final String location = heights.text;
     final DateFormat formatter = DateFormat('yyyy-MM-dd');
-    final String formatted = formatter.format(today!);
-    final String date_1 = today.toString();
+    final String formatted = spaceController.plantationDate.toString();
+
     final double density_1 = double.parse(row.text) * double.parse(column.text);
     final bytes = image?.readAsBytesSync();
     String imageEncoded = base64Encode(bytes!);
